@@ -9,44 +9,41 @@ import secrets
 app = Flask(__name__)
 app.secret_key = secrets.token_hex(16)  # Generate a secure secret key
 
-# Simple file-based databases
-TASKS_FILE = os.path.join(os.path.dirname(__file__), 'tasks.json')
-USERS_FILE = os.path.join(os.path.dirname(__file__), 'users.json')
+# In-memory storage for development/demo purposes
+# In production, you would use a database
+USERS = []
+TASKS = []
 
-# Helper functions for data access
-def get_tasks():
-    if not os.path.exists(TASKS_FILE):
-        return []
-    with open(TASKS_FILE, 'r') as f:
+# Load initial data if files exist (for local development)
+def load_initial_data():
+    global USERS, TASKS
+    
+    # Try to load users
+    if os.path.exists('app/api/users.json'):
         try:
-            return json.load(f)
+            with open('app/api/users.json', 'r') as f:
+                USERS = json.load(f)
         except:
-            return []
-
-def save_tasks(tasks):
-    with open(TASKS_FILE, 'w') as f:
-        json.dump(tasks, f, indent=2)
-
-def get_users():
-    if not os.path.exists(USERS_FILE):
-        return []
-    with open(USERS_FILE, 'r') as f:
+            pass
+    
+    # Try to load tasks
+    if os.path.exists('app/api/tasks.json'):
         try:
-            return json.load(f)
+            with open('app/api/tasks.json', 'r') as f:
+                TASKS = json.load(f)
         except:
-            return []
+            pass
 
-def save_users(users):
-    with open(USERS_FILE, 'w') as f:
-        json.dump(users, f, indent=2)
+# Load data on startup
+load_initial_data()
 
+# Helper functions
 def hash_password(password):
     """Hash a password for storing."""
     return hashlib.sha256(password.encode()).hexdigest()
 
 def get_user_by_username(username):
-    users = get_users()
-    for user in users:
+    for user in USERS:
         if user['username'] == username:
             return user
     return None
@@ -72,15 +69,20 @@ def register():
             return redirect(url_for('register'))
         
         # Create new user
-        users = get_users()
         new_user = {
             'id': str(uuid.uuid4()),
             'username': username,
             'password': hash_password(password),
             'created_at': datetime.now().isoformat()
         }
-        users.append(new_user)
-        save_users(users)
+        USERS.append(new_user)
+        
+        # Try to save to file (for local development)
+        try:
+            with open('app/api/users.json', 'w') as f:
+                json.dump(USERS, f, indent=2)
+        except Exception as e:
+            print(f"Warning: Could not save users to file: {e}")
         
         # Log the user in
         session['user_id'] = new_user['id']
@@ -119,8 +121,7 @@ def home():
         return redirect(url_for('login'))
     
     # Get only tasks for the current user
-    all_tasks = get_tasks()
-    user_tasks = [task for task in all_tasks if task.get('user_id') == session['user_id']]
+    user_tasks = [task for task in TASKS if task.get('user_id') == session['user_id']]
     
     return render_template('index.html', tasks=user_tasks, username=session['username'])
 
@@ -129,8 +130,7 @@ def get_all_tasks():
     if not is_logged_in():
         return jsonify({'error': 'Unauthorized'}), 401
     
-    all_tasks = get_tasks()
-    user_tasks = [task for task in all_tasks if task.get('user_id') == session['user_id']]
+    user_tasks = [task for task in TASKS if task.get('user_id') == session['user_id']]
     
     return jsonify(user_tasks)
 
@@ -139,7 +139,6 @@ def create_task():
     if not is_logged_in():
         return redirect(url_for('login'))
     
-    tasks = get_tasks()
     data = request.form
     
     new_task = {
@@ -151,8 +150,14 @@ def create_task():
         'created_at': datetime.now().isoformat()
     }
     
-    tasks.append(new_task)
-    save_tasks(tasks)
+    TASKS.append(new_task)
+    
+    # Try to save to file (for local development)
+    try:
+        with open('app/api/tasks.json', 'w') as f:
+            json.dump(TASKS, f, indent=2)
+    except Exception as e:
+        print(f"Warning: Could not save tasks to file: {e}")
     
     return redirect(url_for('home'))
 
@@ -161,8 +166,7 @@ def get_task(task_id):
     if not is_logged_in():
         return jsonify({'error': 'Unauthorized'}), 401
     
-    tasks = get_tasks()
-    task = next((t for t in tasks if t['id'] == task_id and t.get('user_id') == session['user_id']), None)
+    task = next((t for t in TASKS if t['id'] == task_id and t.get('user_id') == session['user_id']), None)
     
     if task:
         return jsonify(task)
@@ -173,17 +177,22 @@ def update_task(task_id):
     if not is_logged_in():
         return redirect(url_for('login'))
     
-    tasks = get_tasks()
-    task_index = next((i for i, t in enumerate(tasks) if t['id'] == task_id and t.get('user_id') == session['user_id']), None)
+    task_index = next((i for i, t in enumerate(TASKS) if t['id'] == task_id and t.get('user_id') == session['user_id']), None)
     
     if task_index is not None:
         data = request.form
         
-        tasks[task_index]['title'] = data.get('title', tasks[task_index]['title'])
-        tasks[task_index]['description'] = data.get('description', tasks[task_index]['description'])
-        tasks[task_index]['status'] = data.get('status', tasks[task_index]['status'])
+        TASKS[task_index]['title'] = data.get('title', TASKS[task_index]['title'])
+        TASKS[task_index]['description'] = data.get('description', TASKS[task_index]['description'])
+        TASKS[task_index]['status'] = data.get('status', TASKS[task_index]['status'])
         
-        save_tasks(tasks)
+        # Try to save to file (for local development)
+        try:
+            with open('app/api/tasks.json', 'w') as f:
+                json.dump(TASKS, f, indent=2)
+        except Exception as e:
+            print(f"Warning: Could not save tasks to file: {e}")
+        
         return redirect(url_for('home'))
     
     return jsonify({'error': 'Task not found'}), 404
@@ -193,12 +202,18 @@ def delete_task(task_id):
     if not is_logged_in():
         return redirect(url_for('login'))
     
-    tasks = get_tasks()
-    task_index = next((i for i, t in enumerate(tasks) if t['id'] == task_id and t.get('user_id') == session['user_id']), None)
+    task_index = next((i for i, t in enumerate(TASKS) if t['id'] == task_id and t.get('user_id') == session['user_id']), None)
     
     if task_index is not None:
-        del tasks[task_index]
-        save_tasks(tasks)
+        del TASKS[task_index]
+        
+        # Try to save to file (for local development)
+        try:
+            with open('app/api/tasks.json', 'w') as f:
+                json.dump(TASKS, f, indent=2)
+        except Exception as e:
+            print(f"Warning: Could not save tasks to file: {e}")
+        
         return redirect(url_for('home'))
     
     return jsonify({'error': 'Task not found'}), 404
@@ -206,4 +221,6 @@ def delete_task(task_id):
 # For local development
 if __name__ == '__main__':
     app.run(debug=True)
+
+
 
