@@ -135,6 +135,3 @@ For a production application, consider these additional security measures:
 - Add task sharing between users
 - Implement task categories and due dates
 
-## License
-
-MIT
