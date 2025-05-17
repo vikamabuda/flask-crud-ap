@@ -64,7 +64,7 @@ Key features:
 
 The application provides a complete user interface:
 
-![User Interface](screenshots/ui_components.png)
+
 
 Key features:
 - Login and registration forms
